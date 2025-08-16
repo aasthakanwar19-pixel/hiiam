@@ -37,7 +37,9 @@ const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
 app.use('/uploads', express.static(uploadsDir));
-app.use(express.static(path.join(__dirname, 'frontend')));
+// B.H: Adjust this path based on your final folder structure
+app.use(express.static(path.join(__dirname, '../frontend'))); // Assumes frontend/ and backend/ are siblings
+// app.use(express.static(path.join(__dirname, 'frontend'))); // Assumes frontend/ is inside the backend/ folder's parent
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, 'uploads/'),
@@ -167,9 +169,34 @@ app.post('/api/verify-payment', async (req, res) => {
         if (!mimeType || !imageData || !studentDetails) return res.status(400).json({ error: "Missing data for verification." });
         const model = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
         const prompt = `
-            You are an AI payment verification assistant. Analyze the payment screenshot.
-            Compare it against these details:
+            You are an AI payment verification assistant for a coaching center.
+            Analyze the attached payment screenshot and provide a summary.
+            Compare the information in the screenshot against the following expected details:
             - Student Name: ${studentDetails.name}
             - Expected Amount: INR ${studentDetails.expectedAmount}
             - Expected Recipient: ${studentDetails.expectedRecipient}
-            Provide a short summary starting with **VERIFIED:**, **UNVERIFIED - MISMATCH:**, or **UNVER
+
+            Based on your analysis, provide a short, clear summary. Start your response with one of the following statuses:
+            - **VERIFIED:** (if amount and recipient match)
+            - **UNVERIFIED - MISMATCH:** (if amount or recipient do not match)
+            - **UNVERIFIED - INSUFFICIENT INFO:** (if the screenshot is unclear or missing key details)
+
+            Then, list the details you found in the screenshot (Amount, Recipient Name, Transaction ID).
+        `; // B.H: FIXED - Added the missing closing backtick and semicolon here.
+
+        const imagePart = { inlineData: { data: imageData, mimeType: mimeType } };
+        const result = await model.generateContent([prompt, imagePart]);
+        const analysis = result.response.text();
+        res.json({ analysis });
+    } catch (error) {
+        console.error("AI Payment Verification Error:", error);
+        res.status(500).json({ error: "Failed to verify payment using AI." });
+    }
+});
+
+
+// --- START SERVER ---
+app.listen(PORT, () => {
+    console.log(`✅ Server is running on http://localhost:${PORT}`);
+    console.log("Your frontend is now being served from this address.");
+});
